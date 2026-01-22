@@ -1,0 +1,145 @@
+version: "3.8"
+
+services:
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: []
+    command:
+      [
+        "mlflow",
+        "server",
+        "--backend-store-uri",
+        "sqlite:////opt/airflow/mlruns/mlflow.db",
+        "--default-artifact-root",
+        "/opt/airflow/mlruns",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "5000",
+      ]
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/opt/airflow/mlruns
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ml-network
+
+  webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["webserver"]
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__ENABLE_XCOM_PICKLING: "true"
+      AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+      S3_INPUT_BUCKET: ${S3_INPUT_BUCKET:-}
+      S3_OUTPUT_BUCKET: ${S3_OUTPUT_BUCKET:-}
+      S3_SOURCE1_PATH: ${S3_SOURCE1_PATH:-source1_supply_chain.parquet}
+      S3_SOURCE2_PATH: ${S3_SOURCE2_PATH:-source2_financial.parquet}
+      S3_OUTPUT_PATH: ${S3_OUTPUT_PATH:-processed/}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      ETL_OUTPUT_FORMAT: ${ETL_OUTPUT_FORMAT:-parquet}
+      SAVE_INTERMEDIATE: ${SAVE_INTERMEDIATE:-false}
+      ICEBERG_ENABLED: ${ICEBERG_ENABLED:-false}
+      ICEBERG_TABLE_PATH: ${ICEBERG_TABLE_PATH:-}
+      ICEBERG_S3_LOCATION: ${ICEBERG_S3_LOCATION:-}
+      ICEBERG_PARTITION_KEY: ${ICEBERG_PARTITION_KEY:-}
+      ICEBERG_DATABASE_NAME: ${ICEBERG_DATABASE_NAME:-corporate_db}
+      ICEBERG_TABLE_NAME: ${ICEBERG_TABLE_NAME:-corporate_registry}
+      AWS_ACCOUNT_ID: ${AWS_ACCOUNT_ID:-}
+      PROFIT_THRESHOLD: ${PROFIT_THRESHOLD:-100.0}
+      TRAIN_RATIO: ${TRAIN_RATIO:-0.8}
+      MAX_ITER: ${MAX_ITER:-100}
+      REG_PARAM: ${REG_PARAM:-0.01}
+      FEATURE_COLUMNS: ${FEATURE_COLUMNS:-revenue,num_suppliers,profit_margin_normalized}
+      MODEL_NAME: ${MODEL_NAME:-corporate_profit_predictor}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME:-corporate_profit_prediction}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./etl_pipeline:/opt/airflow/etl_pipeline
+      - ./ml_pipeline:/opt/airflow/ml_pipeline
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./mlruns:/opt/airflow/mlruns
+      - ./.env:/opt/airflow/.env:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - ml-network
+    healthcheck:
+      test:
+        ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["scheduler"]
+    depends_on:
+      webserver:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__ENABLE_XCOM_PICKLING: "true"
+      S3_INPUT_BUCKET: ${S3_INPUT_BUCKET:-}
+      S3_OUTPUT_BUCKET: ${S3_OUTPUT_BUCKET:-}
+      S3_SOURCE1_PATH: ${S3_SOURCE1_PATH:-source1_supply_chain.parquet}
+      S3_SOURCE2_PATH: ${S3_SOURCE2_PATH:-source2_financial.parquet}
+      S3_OUTPUT_PATH: ${S3_OUTPUT_PATH:-processed/}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      ETL_OUTPUT_FORMAT: ${ETL_OUTPUT_FORMAT:-parquet}
+      SAVE_INTERMEDIATE: ${SAVE_INTERMEDIATE:-false}
+      ICEBERG_ENABLED: ${ICEBERG_ENABLED:-false}
+      ICEBERG_TABLE_PATH: ${ICEBERG_TABLE_PATH:-}
+      ICEBERG_S3_LOCATION: ${ICEBERG_S3_LOCATION:-}
+      ICEBERG_PARTITION_KEY: ${ICEBERG_PARTITION_KEY:-}
+      ICEBERG_DATABASE_NAME: ${ICEBERG_DATABASE_NAME:-corporate_db}
+      ICEBERG_TABLE_NAME: ${ICEBERG_TABLE_NAME:-corporate_registry}
+      AWS_ACCOUNT_ID: ${AWS_ACCOUNT_ID:-}
+      PROFIT_THRESHOLD: ${PROFIT_THRESHOLD:-100.0}
+      TRAIN_RATIO: ${TRAIN_RATIO:-0.8}
+      MAX_ITER: ${MAX_ITER:-100}
+      REG_PARAM: ${REG_PARAM:-0.01}
+      FEATURE_COLUMNS: ${FEATURE_COLUMNS:-revenue,num_suppliers,profit_margin_normalized}
+      MODEL_NAME: ${MODEL_NAME:-corporate_profit_predictor}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME:-corporate_profit_prediction}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./etl_pipeline:/opt/airflow/etl_pipeline
+      - ./ml_pipeline:/opt/airflow/ml_pipeline
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./mlruns:/opt/airflow/mlruns
+      - ./.env:/opt/airflow/.env:ro
+    networks:
+      - ml-network
+    restart: always
+
+networks:
+  ml-network:
+    driver: bridge
