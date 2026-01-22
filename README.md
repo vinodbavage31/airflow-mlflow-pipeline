@@ -3,7 +3,7 @@
 A production-grade, containerized machine learning pipeline demonstrating modern MLOps practices. This project orchestrates data generation, ETL processing, model training, and experiment tracking using industry-standard tools.
 
 **Author**: Vinod Bavage  
-**Repository**: [github.com/vinodbavage31/ML-pipeline](https://github.com/vinodbavage31/ML-pipeline)
+**Repository**: [github.com/vinodbavage31/ML-pipeline](https://github.com/vinodbavage31/airflow-mlflow-pipeline)
 
 ---
 
